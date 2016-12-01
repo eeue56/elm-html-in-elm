@@ -1,8 +1,8 @@
-module ElmHtml.ToString exposing (..)
+module ElmHtml.ToString exposing (nodeRecordToString, nodeTypeToString, prettyPrintNodeRecord)
 
 {-| Convert ElmHtml to string
 
-@docs nodeRecordToString, nodeTypeToString
+@docs nodeRecordToString, nodeTypeToString, prettyPrintNodeRecord
 
 -}
 
@@ -16,7 +16,19 @@ import ElmHtml.InternalTypes exposing (..)
     nests them under this one
 -}
 nodeRecordToString : NodeRecord -> String
-nodeRecordToString { tag, children, facts } =
+nodeRecordToString =
+    nodeRecordToStringHelp False
+
+
+{-| Pretty print a node record.
+-}
+prettyPrintNodeRecord : NodeRecord -> String
+prettyPrintNodeRecord =
+    nodeRecordToStringHelp True
+
+
+nodeRecordToStringHelp : Bool -> NodeRecord -> String
+nodeRecordToStringHelp prettyPrint { tag, children, facts } =
     let
         openTag : List (Maybe String) -> String
         openTag extras =
@@ -33,15 +45,17 @@ nodeRecordToString { tag, children, facts } =
 
                         more ->
                             " " ++ (String.join " " more)
+
+                closingBracket =
+                    if List.isEmpty children then
+                        "/>"
+                    else
+                        ">"
             in
-                "<" ++ tag ++ filling ++ ">"
+                "<" ++ tag ++ filling ++ closingBracket
 
         closeTag =
             "</" ++ tag ++ ">"
-
-        childrenStrings =
-            List.map nodeTypeToString children
-                |> String.join ""
 
         styles =
             case Dict.toList facts.styles of
@@ -71,12 +85,35 @@ nodeRecordToString { tag, children, facts } =
                 |> List.map (\( k, v ) -> k ++ "=" ++ (String.toLower <| toString v))
                 |> String.join " "
                 |> Just
+
+        joinChar =
+            if prettyPrint then
+                "\n"
+            else
+                ""
+
+        childToString child =
+            if prettyPrint then
+                "  " ++ nodeTypeToString child
+            else
+                nodeTypeToString child
+
+        opener =
+            openTag [ classes, styles, stringAttributes, boolAttributes ]
     in
-        String.join ""
-            [ openTag [ classes, styles, stringAttributes, boolAttributes ]
-            , childrenStrings
-            , closeTag
-            ]
+        if List.isEmpty children then
+            -- this will be printed like <foo/> because it has no children,
+            -- so no closing tag necessary
+            opener
+        else
+            let
+                childrenStrings =
+                    children
+                        |> List.map childToString
+                        |> String.join joinChar
+            in
+                [ opener, childrenStrings, closeTag ]
+                    |> String.join joinChar
 
 
 {-| Convert a given html node to a string based on the type
