@@ -6,11 +6,8 @@ module ElmHtml.ToString exposing (..)
 
 -}
 
-import Html exposing (Html)
 import String
 import Dict exposing (Dict)
-import Json.Decode
-import ElmHtml.Constants exposing (..)
 import ElmHtml.InternalTypes exposing (..)
 
 
