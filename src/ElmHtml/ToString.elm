@@ -13,7 +13,7 @@ import ElmHtml.InternalTypes exposing (..)
 
 {-| Convert a node record to a string. This basically takes the tag name, then
     pulls all the facts into tag declaration, then goes through the children and
-    nests them undert hsi one
+    nests them under this one
 -}
 nodeRecordToString : NodeRecord -> String
 nodeRecordToString { tag, children, facts } =
