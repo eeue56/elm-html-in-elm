@@ -81,7 +81,6 @@ type alias CustomNodeRecord =
 type alias Facts =
     { styles : Dict String String
     , events : Maybe Json.Decode.Value
-    , attributes : Maybe Json.Decode.Value
     , attributeNamespace : Maybe Json.Decode.Value
     , stringAttributes : Dict String String
     , boolAttributes : Dict String Bool
@@ -136,6 +135,21 @@ decodeTagger =
         , Json.Decode.at [ "text" ] decodeElmHtml
         , Json.Decode.at [ "custom" ] decodeElmHtml
         ]
+
+
+decodeKeyedNode : Json.Decode.Decoder NodeRecord
+decodeKeyedNode =
+    let
+        -- elm stores keyed nodes as tuples
+        -- we only want to decode the html, in the second property
+        decodeSecondNode =
+            Json.Decode.field "_1" decodeElmHtml
+    in
+        Json.Decode.map4 NodeRecord
+            (Json.Decode.field "tag" Json.Decode.string)
+            (Json.Decode.field "children" (Json.Decode.list decodeSecondNode))
+            (Json.Decode.field "facts" decodeFacts)
+            (Json.Decode.field "descendantsCount" Json.Decode.int)
 
 
 {-| decode a node record
@@ -212,36 +226,48 @@ encodeStyles stylesDict =
         Json.Encode.object [ ( styleKey, Json.Encode.object encodedDict ) ]
 
 
-{-| decode things which are not known using the given decoder for the value
+{-| grab things from attributes via a decoder, then anything that isn't filtered on
+    the object
 -}
 decodeOthers : Json.Decode.Decoder a -> Json.Decode.Decoder (Dict String a)
 decodeOthers otherDecoder =
-    (Json.Decode.dict Json.Decode.value)
-        |> Json.Decode.andThen (filterKnownKeys
-            >> Dict.toList
-            >> List.filterMap
-                (\( key, value ) ->
-                    case Json.Decode.decodeValue otherDecoder value of
-                        Err _ ->
-                            Nothing
-
-                        Ok v ->
-                            Just ( key, v )
-                )
-            >> Dict.fromList
-            >> Json.Decode.succeed
+    decodeAttributes otherDecoder
+        |> Json.Decode.andThen (\attributes ->
+            decodeDictFilterMap otherDecoder
+                |> Json.Decode.map (filterKnownKeys >> Dict.union attributes)
         )
+
+{-| For a given decoder, keep the values from a dict that pass the decoder -}
+decodeDictFilterMap : Json.Decode.Decoder a -> Json.Decode.Decoder (Dict String a)
+decodeDictFilterMap decoder =
+    Json.Decode.dict Json.Decode.value
+        |> Json.Decode.map
+            (Dict.toList
+                >> List.filterMap
+                    (\(key, value) ->
+                        case Json.Decode.decodeValue decoder value of
+                            Err _ -> Nothing
+                            Ok v -> Just ( key, v )
+                    )
+                >> Dict.fromList
+            )
+
+decodeAttributes : Json.Decode.Decoder a -> Json.Decode.Decoder (Dict String a)
+decodeAttributes decoder =
+    Json.Decode.oneOf
+        [ Json.Decode.field attributeKey (decodeDictFilterMap decoder)
+        , Json.Decode.succeed Dict.empty
+        ]
 
 
 {-| decode fact
 -}
 decodeFacts : Json.Decode.Decoder Facts
 decodeFacts =
-    Json.Decode.map6 Facts
+    Json.Decode.map5 Facts
         (decodeStyles)
-        (Json.Decode.maybe (field eventKey Json.Decode.value))
-        (Json.Decode.maybe (field attributeKey Json.Decode.value))
-        (Json.Decode.maybe (field attributeNamespaceKey Json.Decode.value))
+        (Json.Decode.maybe (Json.Decode.field eventKey Json.Decode.value))
+        (Json.Decode.maybe (Json.Decode.field attributeNamespaceKey Json.Decode.value))
         (decodeOthers Json.Decode.string)
         (decodeOthers Json.Decode.bool)
 
@@ -251,7 +277,6 @@ emptyFacts : Facts
 emptyFacts =
     { styles = Dict.empty
     , events = Nothing
-    , attributes = Nothing
     , attributeNamespace = Nothing
     , stringAttributes = Dict.empty
     , boolAttributes = Dict.empty
