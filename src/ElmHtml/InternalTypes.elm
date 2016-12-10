@@ -10,9 +10,10 @@ module ElmHtml.InternalTypes
         , emptyFacts
         )
 
-{-| Internal types used to represent Elm Html
+{-| Internal types used to represent Elm Html in pure Elm
 
 @docs ElmHtml, TextTagRecord, NodeRecord, CustomNodeRecord, MarkdownNodeRecord, Facts
+
 @docs decodeElmHtml, emptyFacts
 -}
 

@@ -1,8 +1,12 @@
-module ElmHtml.ToString exposing (nodeToString, nodeRecordToString, nodeToStringWithOptions
-    , FormatOptions, defaultFormatOptions
+module ElmHtml.ToString exposing
+    ( nodeToString
+    , nodeRecordToString
+    , nodeToStringWithOptions
+    , FormatOptions
+    , defaultFormatOptions
     )
 
-{-| Convert ElmHtml to string
+{-| Convert ElmHtml to string.
 
 @docs nodeRecordToString, nodeToString, nodeToStringWithOptions
 
@@ -28,6 +32,38 @@ defaultFormatOptions =
     { indent = 0
     , newLines = False
     }
+
+nodeToLines : FormatOptions -> ElmHtml -> List String
+nodeToLines options nodeType =
+    case nodeType of
+        TextTag { text } ->
+            [ text ]
+
+        NodeEntry record ->
+            nodeRecordToString options record
+
+        CustomNode record ->
+            []
+
+        MarkdownNode record ->
+            [ record.model.markdown ]
+
+        NoOp ->
+            []
+
+{-| Convert a given html node to a string based on the type
+-}
+nodeToString : ElmHtml -> String
+nodeToString =
+    nodeToStringWithOptions defaultFormatOptions
+
+{-| same as nodeToString, but with options
+-}
+nodeToStringWithOptions : FormatOptions -> ElmHtml -> String
+nodeToStringWithOptions options =
+    nodeToLines options
+        >> String.join (if options.newLines then "\n" else "")
+
 
 {-| Convert a node record to a string. This basically takes the tag name, then
     pulls all the facts into tag declaration, then goes through the children and
@@ -95,35 +131,3 @@ nodeRecordToString options { tag, children, facts } =
         [ openTag [ classes, styles, stringAttributes, boolAttributes ] ]
             ++ childrenStrings
             ++ [ closeTag ]
-
-
-nodeToLines : FormatOptions -> ElmHtml -> List String
-nodeToLines options nodeType =
-    case nodeType of
-        TextTag { text } ->
-            [ text ]
-
-        NodeEntry record ->
-            nodeRecordToString options record
-
-        CustomNode record ->
-            []
-
-        MarkdownNode record ->
-            [ record.model.markdown ]
-
-        NoOp ->
-            []
-
-{-| Convert a given html node to a string based on the type
--}
-nodeToString : ElmHtml -> String
-nodeToString =
-    nodeToStringWithOptions defaultFormatOptions
-
-{-| same as nodeToString, but with options
--}
-nodeToStringWithOptions : FormatOptions -> ElmHtml -> String
-nodeToStringWithOptions options =
-    nodeToLines options
-        >> String.join (if options.newLines then "\n" else "")
