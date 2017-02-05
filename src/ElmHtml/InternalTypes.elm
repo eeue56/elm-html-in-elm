@@ -111,6 +111,9 @@ decodeElmHtml =
                     "tagger" ->
                         decodeTagger
 
+                    "thunk" ->
+                        field "node" decodeElmHtml
+
                     _ ->
                         Json.Decode.fail ("No such type as " ++ typeString)
             )
