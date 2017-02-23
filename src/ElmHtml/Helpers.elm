@@ -6,8 +6,6 @@ Internal helpers for ElmHtml
 @docs filterKnownKeys
 -}
 
--- where
-
 import Dict exposing (Dict)
 import ElmHtml.Constants exposing (..)
 

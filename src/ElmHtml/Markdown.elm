@@ -1,7 +1,7 @@
 module ElmHtml.Markdown exposing (..)
 {-| Markdown helpers
 
-@docs baseMarkdownModel, MarkdownOptions, MarkdownModel
+@docs MarkdownOptions, MarkdownModel, baseMarkdownModel
 
 @docs encodeOptions, encodeMarkdownModel, decodeMarkdownModel
 
@@ -31,7 +31,7 @@ type alias MarkdownOptions =
     , smartypants : Bool
     }
 
-{-| An internal markdown model
+{-| An internal markdown model. Options are the things you give markdown, markdown is the string
 -}
 type alias MarkdownModel =
     { options : MarkdownOptions

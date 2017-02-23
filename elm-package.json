@@ -1,5 +1,5 @@
 {
-    "version": "1.0.1",
+    "version": "2.0.0",
     "summary": "A pure Elm representation of Elm Html",
     "repository": "https://github.com/eeue56/elm-html-in-elm.git",
     "license": "BSD3",
@@ -8,7 +8,6 @@
     ],
     "exposed-modules": [
         "ElmHtml.Constants",
-        "ElmHtml.Helpers",
         "ElmHtml.InternalTypes",
         "ElmHtml.Markdown",
         "ElmHtml.ToString"
