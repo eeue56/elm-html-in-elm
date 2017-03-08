@@ -1,10 +1,11 @@
-module ElmHtml.ToString exposing
-    ( nodeToString
-    , nodeRecordToString
-    , nodeToStringWithOptions
-    , FormatOptions
-    , defaultFormatOptions
-    )
+module ElmHtml.ToString
+    exposing
+        ( nodeToString
+        , nodeRecordToString
+        , nodeToStringWithOptions
+        , FormatOptions
+        , defaultFormatOptions
+        )
 
 {-| Convert ElmHtml to string.
 
@@ -25,6 +26,7 @@ type alias FormatOptions =
     , newLines : Bool
     }
 
+
 {-| default formatting options
 -}
 defaultFormatOptions : FormatOptions
@@ -32,6 +34,7 @@ defaultFormatOptions =
     { indent = 0
     , newLines = False
     }
+
 
 nodeToLines : FormatOptions -> ElmHtml -> List String
 nodeToLines options nodeType =
@@ -51,18 +54,25 @@ nodeToLines options nodeType =
         NoOp ->
             []
 
+
 {-| Convert a given html node to a string based on the type
 -}
 nodeToString : ElmHtml -> String
 nodeToString =
     nodeToStringWithOptions defaultFormatOptions
 
+
 {-| same as nodeToString, but with options
 -}
 nodeToStringWithOptions : FormatOptions -> ElmHtml -> String
 nodeToStringWithOptions options =
     nodeToLines options
-        >> String.join (if options.newLines then "\n" else "")
+        >> String.join
+            (if options.newLines then
+                "\n"
+             else
+                ""
+            )
 
 
 {-| Convert a node record to a string. This basically takes the tag name, then
@@ -126,8 +136,20 @@ nodeRecordToString options { tag, children, facts } =
                 |> List.map (\( k, v ) -> k ++ "=" ++ (String.toLower <| toString v))
                 |> String.join " "
                 |> Just
-
     in
-        [ openTag [ classes, styles, stringAttributes, boolAttributes ] ]
-            ++ childrenStrings
-            ++ [ closeTag ]
+        case toElementKind tag of
+            {- Void elements only have a start tag; end tags must not be
+               specified for void elements.
+            -}
+            VoidElements ->
+                [ openTag [ classes, styles, stringAttributes, boolAttributes ] ]
+
+            {- TODO: implement restrictions for RawTextElements,
+               EscapableRawTextElements. Also handle ForeignElements correctly.
+               For now just punt and use the previous behavior for all other
+               element kinds.
+            -}
+            _ ->
+                [ openTag [ classes, styles, stringAttributes, boolAttributes ] ]
+                    ++ childrenStrings
+                    ++ [ closeTag ]

@@ -8,13 +8,15 @@ module ElmHtml.InternalTypes
         , Facts
         , decodeElmHtml
         , emptyFacts
+        , ElementKind(..)
+        , toElementKind
         )
 
 {-| Internal types used to represent Elm Html in pure Elm
 
-@docs ElmHtml, TextTagRecord, NodeRecord, CustomNodeRecord, MarkdownNodeRecord, Facts
+@docs ElmHtml, TextTagRecord, NodeRecord, CustomNodeRecord, MarkdownNodeRecord, Facts, ElementKind
 
-@docs decodeElmHtml, emptyFacts
+@docs decodeElmHtml, emptyFacts, toElementKind
 -}
 
 import Dict exposing (Dict)
@@ -86,6 +88,18 @@ type alias Facts =
     , stringAttributes : Dict String String
     , boolAttributes : Dict String Bool
     }
+
+
+{-| Type for representing the five kinds of elements according to HTML 5
+[spec](https://html.spec.whatwg.org/multipage/syntax.html#elements-2).
+Used to handle different rendering behavior depending on the type of element.
+-}
+type ElementKind
+    = VoidElements
+    | RawTextElements
+    | EscapableRawTextElements
+    | ForeignElements
+    | NormalElements
 
 
 {-| decode a json object into ElmHtml
@@ -239,25 +253,32 @@ encodeStyles stylesDict =
 decodeOthers : Json.Decode.Decoder a -> Json.Decode.Decoder (Dict String a)
 decodeOthers otherDecoder =
     decodeAttributes otherDecoder
-        |> Json.Decode.andThen (\attributes ->
-            decodeDictFilterMap otherDecoder
-                |> Json.Decode.map (filterKnownKeys >> Dict.union attributes)
-        )
+        |> Json.Decode.andThen
+            (\attributes ->
+                decodeDictFilterMap otherDecoder
+                    |> Json.Decode.map (filterKnownKeys >> Dict.union attributes)
+            )
 
-{-| For a given decoder, keep the values from a dict that pass the decoder -}
+
+{-| For a given decoder, keep the values from a dict that pass the decoder
+-}
 decodeDictFilterMap : Json.Decode.Decoder a -> Json.Decode.Decoder (Dict String a)
 decodeDictFilterMap decoder =
     Json.Decode.dict Json.Decode.value
         |> Json.Decode.map
             (Dict.toList
                 >> List.filterMap
-                    (\(key, value) ->
+                    (\( key, value ) ->
                         case Json.Decode.decodeValue decoder value of
-                            Err _ -> Nothing
-                            Ok v -> Just ( key, v )
+                            Err _ ->
+                                Nothing
+
+                            Ok v ->
+                                Just ( key, v )
                     )
                 >> Dict.fromList
             )
+
 
 decodeAttributes : Json.Decode.Decoder a -> Json.Decode.Decoder (Dict String a)
 decodeAttributes decoder =
@@ -278,6 +299,7 @@ decodeFacts =
         (decodeOthers Json.Decode.string)
         (decodeOthers Json.Decode.bool)
 
+
 {-| Just empty facts
 -}
 emptyFacts : Facts
@@ -289,3 +311,47 @@ emptyFacts =
     , boolAttributes = Dict.empty
     }
 
+
+{-| Identify the kind of element. Helper to convert an tag name into a type for
+pattern matching.
+-}
+toElementKind : String -> ElementKind
+toElementKind element =
+    let
+        voidElements =
+            [ "area"
+            , "base"
+            , "br"
+            , "col"
+            , "embed"
+            , "hr"
+            , "img"
+            , "input"
+            , "link"
+            , "meta"
+            , "param"
+            , "source"
+            , "track"
+            , "wbr"
+            ]
+
+        rawTextElements =
+            [ "script", "style" ]
+
+        escapableRawTextElements =
+            [ "textarea", "title" ]
+
+        {- Foreign elements are elements from the MathML namespace and the
+           SVG namespace. TODO: detect these nodes and handle them correctly. Right
+           now they will just be treated as Normal elements.
+        -}
+    in
+        if List.member element voidElements then
+            VoidElements
+        else if List.member element rawTextElements then
+            RawTextElements
+        else if List.member element escapableRawTextElements then
+            EscapableRawTextElements
+        else
+            -- All other allowed HTML elements are normal elements
+            NormalElements
