@@ -312,46 +312,62 @@ emptyFacts =
     }
 
 
+{-| A list of Void elements as defined by the HTML5 specification. These
+   elements must not have closing tags and most not be written as self closing
+   either
+-}
+voidElements =
+    [ "area"
+    , "base"
+    , "br"
+    , "col"
+    , "embed"
+    , "hr"
+    , "img"
+    , "input"
+    , "link"
+    , "meta"
+    , "param"
+    , "source"
+    , "track"
+    , "wbr"
+    ]
+
+
+{-| A list of all Raw Text Elements as defined by the HTML5 specification. They
+   can contain only text and have restrictions on which characters can appear
+   within its innerHTML
+-}
+rawTextElements =
+    [ "script", "style" ]
+
+
+{-| A list of all Escapable Raw Text Elements as defined by the HTML5
+   specification. They can have text and character references, but the text must
+   not contain an ambiguous ampersand along with addional restrictions:
+   https://html.spec.whatwg.org/multipage/syntax.html#cdata-rcdata-restrictions
+-}
+escapableRawTextElements =
+    [ "textarea", "title" ]
+
+
+{- Foreign elements are elements from the MathML namespace and the
+   SVG namespace. TODO: detect these nodes and handle them correctly. Right
+   now they will just be treated as Normal elements.
+-}
+
+
 {-| Identify the kind of element. Helper to convert an tag name into a type for
 pattern matching.
 -}
 toElementKind : String -> ElementKind
 toElementKind element =
-    let
-        voidElements =
-            [ "area"
-            , "base"
-            , "br"
-            , "col"
-            , "embed"
-            , "hr"
-            , "img"
-            , "input"
-            , "link"
-            , "meta"
-            , "param"
-            , "source"
-            , "track"
-            , "wbr"
-            ]
-
-        rawTextElements =
-            [ "script", "style" ]
-
-        escapableRawTextElements =
-            [ "textarea", "title" ]
-
-        {- Foreign elements are elements from the MathML namespace and the
-           SVG namespace. TODO: detect these nodes and handle them correctly. Right
-           now they will just be treated as Normal elements.
-        -}
-    in
-        if List.member element voidElements then
-            VoidElements
-        else if List.member element rawTextElements then
-            RawTextElements
-        else if List.member element escapableRawTextElements then
-            EscapableRawTextElements
-        else
-            -- All other allowed HTML elements are normal elements
-            NormalElements
+    if List.member element voidElements then
+        VoidElements
+    else if List.member element rawTextElements then
+        RawTextElements
+    else if List.member element escapableRawTextElements then
+        EscapableRawTextElements
+    else
+        -- All other allowed HTML elements are normal elements
+        NormalElements
