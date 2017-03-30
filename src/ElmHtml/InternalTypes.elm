@@ -316,6 +316,7 @@ emptyFacts =
    elements must not have closing tags and most not be written as self closing
    either
 -}
+voidElements : List String
 voidElements =
     [ "area"
     , "base"
@@ -338,6 +339,7 @@ voidElements =
    can contain only text and have restrictions on which characters can appear
    within its innerHTML
 -}
+rawTextElements : List String
 rawTextElements =
     [ "script", "style" ]
 
@@ -347,8 +349,10 @@ rawTextElements =
    not contain an ambiguous ampersand along with addional restrictions:
    https://html.spec.whatwg.org/multipage/syntax.html#cdata-rcdata-restrictions
 -}
+escapableRawTextElements : List String
 escapableRawTextElements =
     [ "textarea", "title" ]
+
 
 
 {- Foreign elements are elements from the MathML namespace and the
