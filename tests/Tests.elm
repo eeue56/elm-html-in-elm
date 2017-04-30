@@ -5,16 +5,20 @@ import ElmHtml.InternalTypes exposing (ElmHtml, ElmHtml(..), Facts, NodeRecord, 
 import Expect
 import Html exposing (Html, button, div, text)
 import Html.Attributes exposing (class, disabled, value)
+import Html.Events exposing (onCheck, onClick, onInput)
 import Json.Decode exposing (decodeValue)
 import Native.HtmlAsJson
 import Test exposing (..)
 
 
-{-| Convert a Html node to a Json
--}
 toJson : Html a -> Json.Decode.Value
 toJson node =
     Native.HtmlAsJson.toJson node
+
+
+eventHandler : String -> Html a -> Json.Decode.Value
+eventHandler eventName node =
+    Native.HtmlAsJson.eventHandler eventName node
 
 
 decodedNode : NodeRecord
@@ -29,7 +33,7 @@ decodedNode =
 decodedFacts : Facts
 decodedFacts =
     { styles = Dict.fromList []
-    , events = Nothing
+    , events = Dict.fromList []
     , attributeNamespace = Nothing
     , stringAttributes = Dict.fromList []
     , boolAttributes = Dict.fromList []
@@ -39,6 +43,12 @@ decodedFacts =
 fromHtml : Html a -> Result String ElmHtml
 fromHtml =
     decodeValue decodeElmHtml << toJson
+
+
+type Msg
+    = SomeMsg
+    | InputMsg String
+    | CheckMsg Bool
 
 
 all : Test
@@ -57,18 +67,18 @@ all =
         , test "parsing attributes" <|
             \() ->
                 let
-                    expectedFacts =
+                    facts =
                         { decodedFacts
                             | stringAttributes = Dict.fromList [ ( "className", "foo" ), ( "value", "bar" ) ]
                             , boolAttributes = Dict.fromList [ ( "disabled", True ) ]
                         }
 
-                    expectedButton =
-                        { decodedNode | tag = "button", facts = expectedFacts }
+                    expected =
+                        { decodedNode | tag = "button", facts = facts }
                 in
                     button [ class "foo", value "bar", disabled True ] []
                         |> fromHtml
-                        |> Expect.equal (Ok (NodeEntry expectedButton))
+                        |> Expect.equal (Ok (NodeEntry expected))
         , test "parsing children" <|
             \() ->
                 let
@@ -84,4 +94,30 @@ all =
                         ]
                         |> fromHtml
                         |> Expect.equal (Ok (NodeEntry expected))
+        , describe "parsing events"
+            [ testParsingEvent "click" (onClick SomeMsg)
+            , testParsingEvent "input" (onInput InputMsg)
+            , testParsingEvent "change" (onCheck CheckMsg)
+            ]
         ]
+
+
+testParsingEvent : String -> Html.Attribute a -> Test
+testParsingEvent eventName eventAttribute =
+    test ("parsing " ++ eventName) <|
+        \() ->
+            let
+                node =
+                    button [ eventAttribute ] []
+
+                facts =
+                    { decodedFacts
+                        | events = Dict.fromList [ ( eventName, eventHandler eventName node ) ]
+                    }
+
+                expected =
+                    { decodedNode | tag = "button", facts = facts }
+            in
+                node
+                    |> fromHtml
+                    |> Expect.equal (Ok (NodeEntry expected))

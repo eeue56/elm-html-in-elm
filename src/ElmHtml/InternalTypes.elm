@@ -83,7 +83,7 @@ type alias CustomNodeRecord =
 -}
 type alias Facts =
     { styles : Dict String String
-    , events : Maybe Json.Decode.Value
+    , events : Dict String Json.Decode.Value
     , attributeNamespace : Maybe Json.Decode.Value
     , stringAttributes : Dict String String
     , boolAttributes : Dict String Bool
@@ -288,13 +288,21 @@ decodeAttributes decoder =
         ]
 
 
+decodeEvents : Json.Decode.Decoder (Dict String Json.Decode.Value)
+decodeEvents =
+    Json.Decode.oneOf
+        [ Json.Decode.field eventKey (Json.Decode.dict Json.Decode.value)
+        , Json.Decode.succeed Dict.empty
+        ]
+
+
 {-| decode fact
 -}
 decodeFacts : Json.Decode.Decoder Facts
 decodeFacts =
     Json.Decode.map5 Facts
         (decodeStyles)
-        (Json.Decode.maybe (Json.Decode.field eventKey Json.Decode.value))
+        (decodeEvents)
         (Json.Decode.maybe (Json.Decode.field attributeNamespaceKey Json.Decode.value))
         (decodeOthers Json.Decode.string)
         (decodeOthers Json.Decode.bool)
@@ -305,7 +313,7 @@ decodeFacts =
 emptyFacts : Facts
 emptyFacts =
     { styles = Dict.empty
-    , events = Nothing
+    , events = Dict.empty
     , attributeNamespace = Nothing
     , stringAttributes = Dict.empty
     , boolAttributes = Dict.empty
