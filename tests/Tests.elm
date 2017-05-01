@@ -1,7 +1,7 @@
 module Tests exposing (..)
 
 import Dict
-import ElmHtml.InternalTypes exposing (ElmHtml, ElmHtml(..), Facts, NodeRecord, decodeElmHtml)
+import ElmHtml.InternalTypes exposing (ElmHtml, ElmHtml(..), Facts, NodeRecord, Tagger, decodeElmHtml)
 import Expect
 import Html exposing (Html, button, div, text)
 import Html.Attributes exposing (class, disabled, value)
@@ -21,6 +21,11 @@ eventHandler eventName node =
     Native.HtmlAsJson.eventHandler eventName node
 
 
+taggerFunction : Json.Decode.Value -> (a -> msg)
+taggerFunction tagger =
+    Native.HtmlAsJson.taggerFunction tagger
+
+
 decodedNode : NodeRecord
 decodedNode =
     { tag = "div"
@@ -34,6 +39,7 @@ decodedFacts : Facts
 decodedFacts =
     { styles = Dict.fromList []
     , events = Dict.fromList []
+    , taggers = []
     , attributeNamespace = Nothing
     , stringAttributes = Dict.fromList []
     , boolAttributes = Dict.fromList []
@@ -99,7 +105,49 @@ all =
             , testParsingEvent "input" (onInput InputMsg)
             , testParsingEvent "change" (onCheck CheckMsg)
             ]
+        , describe "parsing Html.map"
+            [ test "adds the correct tagger to a mapped button" <|
+                \() ->
+                    let
+                        taggedNode =
+                            div [] []
+                                |> Html.map (\msg -> msg ++ "bar")
+                    in
+                        Expect.equal (simulateMsg taggedNode "foo") "foobar"
+            , test "adds two taggers to a double mapped button with changing types" <|
+                \() ->
+                    let
+                        taggedNode =
+                            div [ onClick "somestring" ] []
+                                |> Html.map (\str -> [ str ] ++ [ "bar" ])
+                                |> Html.map (\list -> ( list, "baz" ))
+                    in
+                        Expect.equal (simulateMsg taggedNode "foo") ( [ "foo", "bar" ], "baz" )
+            ]
         ]
+
+
+simulateMsg : Html msg -> a -> msg
+simulateMsg parsedHtml =
+    case (fromHtml parsedHtml) of
+        Ok (NodeEntry node) ->
+            applyTaggers node.facts.taggers
+
+        _ ->
+            Debug.crash "taggers not found"
+
+
+applyTaggers : List Tagger -> a -> msg
+applyTaggers taggers msg =
+    case taggers of
+        [] ->
+            Debug.crash "could not apply empty taggers"
+
+        [ tagger ] ->
+            (taggerFunction tagger msg)
+
+        tagger :: taggers ->
+            applyTaggers taggers (taggerFunction tagger msg)
 
 
 testParsingEvent : String -> Html.Attribute a -> Test

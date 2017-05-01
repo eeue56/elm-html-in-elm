@@ -1,4 +1,5 @@
 module ElmHtml.Markdown exposing (..)
+
 {-| Markdown helpers
 
 @docs MarkdownOptions, MarkdownModel, baseMarkdownModel
@@ -6,8 +7,10 @@ module ElmHtml.Markdown exposing (..)
 @docs encodeOptions, encodeMarkdownModel, decodeMarkdownModel
 
 -}
+
 import Json.Encode
 import Json.Decode exposing (field)
+
 
 {-| Just a default markdown model
 -}
@@ -22,6 +25,7 @@ baseMarkdownModel =
     , markdown = ""
     }
 
+
 {-| options markdown expects
 -}
 type alias MarkdownOptions =
@@ -30,6 +34,7 @@ type alias MarkdownOptions =
     , sanitize : Bool
     , smartypants : Bool
     }
+
 
 {-| An internal markdown model. Options are the things you give markdown, markdown is the string
 -}
@@ -46,6 +51,7 @@ encodeOptions : MarkdownOptions -> Json.Decode.Value
 encodeOptions options =
     Json.Encode.null
 
+
 {-| encode markdown model
 -}
 encodeMarkdownModel : MarkdownModel -> Json.Decode.Value
@@ -54,6 +60,7 @@ encodeMarkdownModel model =
         [ ( "options", encodeOptions model.options )
         , ( "markdown", Json.Encode.string model.markdown )
         ]
+
 
 {-| decode a markdown model
 -}
