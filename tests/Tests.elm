@@ -11,70 +11,6 @@ import Native.HtmlAsJson
 import Test exposing (..)
 
 
-toJson : Html a -> Json.Decode.Value
-toJson node =
-    Native.HtmlAsJson.toJson node
-
-
-eventDecoder : EventHandler -> Json.Decode.Decoder msg
-eventDecoder eventHandler =
-    Native.HtmlAsJson.eventDecoder eventHandler
-
-
-eventHandler : String -> Html a -> Json.Decode.Value
-eventHandler eventName node =
-    Native.HtmlAsJson.eventHandler eventName node
-
-
-taggerFunction : Tagger -> (a -> msg)
-taggerFunction tagger =
-    Native.HtmlAsJson.taggerFunction tagger
-
-
-taggedEventDecoder : List Tagger -> EventHandler -> Json.Decode.Decoder msg
-taggedEventDecoder taggers eventHandler =
-    case taggers of
-        [] ->
-            (eventDecoder eventHandler)
-
-        [ tagger ] ->
-            Json.Decode.map (taggerFunction tagger) (eventDecoder eventHandler)
-
-        tagger :: taggers ->
-            Json.Decode.map (taggerFunction tagger) (taggedEventDecoder taggers eventHandler)
-
-
-decodedNode : NodeRecord msg
-decodedNode =
-    { tag = "div"
-    , children = []
-    , facts = decodedFacts
-    , descendantsCount = 0
-    }
-
-
-decodedFacts : Facts msg
-decodedFacts =
-    { styles = Dict.fromList []
-    , events = Dict.fromList []
-    , attributeNamespace = Nothing
-    , stringAttributes = Dict.fromList []
-    , boolAttributes = Dict.fromList []
-    }
-
-
-fromHtml : Html a -> Result String (ElmHtml msg)
-fromHtml html =
-    toJson html
-        |> decodeValue (decodeElmHtml taggedEventDecoder)
-
-
-type Msg
-    = SomeMsg
-    | InputMsg String
-    | CheckMsg Bool
-
-
 all : Test
 all =
     describe "ElmHtml parsing"
@@ -151,16 +87,77 @@ all =
         ]
 
 
+type Msg
+    = SomeMsg
+    | InputMsg String
+    | CheckMsg Bool
+
+
+toJson : Html a -> Json.Decode.Value
+toJson node =
+    Native.HtmlAsJson.toJson node
+
+
+eventDecoder : EventHandler -> Json.Decode.Decoder msg
+eventDecoder eventHandler =
+    Native.HtmlAsJson.eventDecoder eventHandler
+
+
+eventHandler : String -> Html a -> Json.Decode.Value
+eventHandler eventName node =
+    Native.HtmlAsJson.eventHandler eventName node
+
+
+taggerFunction : Tagger -> (a -> msg)
+taggerFunction tagger =
+    Native.HtmlAsJson.taggerFunction tagger
+
+
+taggedEventDecoder : List Tagger -> EventHandler -> Json.Decode.Decoder msg
+taggedEventDecoder taggers eventHandler =
+    case taggers of
+        [] ->
+            (eventDecoder eventHandler)
+
+        [ tagger ] ->
+            Json.Decode.map (taggerFunction tagger) (eventDecoder eventHandler)
+
+        tagger :: taggers ->
+            Json.Decode.map (taggerFunction tagger) (taggedEventDecoder taggers eventHandler)
+
+
+decodedNode : NodeRecord msg
+decodedNode =
+    { tag = "div"
+    , children = []
+    , facts = decodedFacts
+    , descendantsCount = 0
+    }
+
+
+decodedFacts : Facts msg
+decodedFacts =
+    { styles = Dict.fromList []
+    , events = Dict.fromList []
+    , attributeNamespace = Nothing
+    , stringAttributes = Dict.fromList []
+    , boolAttributes = Dict.fromList []
+    }
+
+
+fromHtml : Html a -> Result String (ElmHtml msg)
+fromHtml html =
+    toJson html
+        |> decodeValue (decodeElmHtml taggedEventDecoder)
+
+
 simulate : String -> String -> ElmHtml msg -> Result String msg
 simulate eventName event parsedHtml =
     case parsedHtml of
         NodeEntry node ->
-            case Dict.get eventName node.facts.events of
-                Just eventDecoder ->
-                    Json.Decode.decodeString eventDecoder event
-
-                Nothing ->
-                    Err ("Could not find event " ++ eventName ++ " on node")
+            Dict.get eventName node.facts.events
+                |> Result.fromMaybe "Tried to trigger event on something other than a NodeEntry"
+                |> Result.andThen (\eventDecoder -> Json.Decode.decodeString eventDecoder event)
 
         _ ->
             Err "Tried to trigger event on something other than a NodeEntry"
