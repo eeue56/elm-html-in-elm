@@ -1,5 +1,5 @@
 {
-    "version": "4.0.0",
+    "version": "5.0.0",
     "summary": "A pure Elm representation of Elm Html",
     "repository": "https://github.com/eeue56/elm-html-in-elm.git",
     "license": "BSD3",
