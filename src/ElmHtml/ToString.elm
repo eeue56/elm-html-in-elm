@@ -36,7 +36,7 @@ defaultFormatOptions =
     }
 
 
-nodeToLines : FormatOptions -> ElmHtml -> List String
+nodeToLines : FormatOptions -> ElmHtml msg -> List String
 nodeToLines options nodeType =
     case nodeType of
         TextTag { text } ->
@@ -57,14 +57,14 @@ nodeToLines options nodeType =
 
 {-| Convert a given html node to a string based on the type
 -}
-nodeToString : ElmHtml -> String
+nodeToString : ElmHtml msg -> String
 nodeToString =
     nodeToStringWithOptions defaultFormatOptions
 
 
 {-| same as nodeToString, but with options
 -}
-nodeToStringWithOptions : FormatOptions -> ElmHtml -> String
+nodeToStringWithOptions : FormatOptions -> ElmHtml msg -> String
 nodeToStringWithOptions options =
     nodeToLines options
         >> String.join
@@ -79,7 +79,7 @@ nodeToStringWithOptions options =
     pulls all the facts into tag declaration, then goes through the children and
     nests them under this one
 -}
-nodeRecordToString : FormatOptions -> NodeRecord -> List String
+nodeRecordToString : FormatOptions -> NodeRecord msg -> List String
 nodeRecordToString options { tag, children, facts } =
     let
         openTag : List (Maybe String) -> String

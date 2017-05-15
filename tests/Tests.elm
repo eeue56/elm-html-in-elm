@@ -1,60 +1,14 @@
 module Tests exposing (..)
 
 import Dict
-import ElmHtml.InternalTypes exposing (ElmHtml, ElmHtml(..), Facts, NodeRecord, Tagger, decodeElmHtml)
+import ElmHtml.InternalTypes exposing (ElmHtml, ElmHtml(..), Facts, NodeRecord, Tagger, EventHandler, decodeElmHtml)
 import Expect
-import Html exposing (Html, button, div, text)
+import Html exposing (Html, button, div, input, text)
 import Html.Attributes exposing (class, disabled, value)
 import Html.Events exposing (onCheck, onClick, onInput)
 import Json.Decode exposing (decodeValue)
 import Native.HtmlAsJson
 import Test exposing (..)
-
-
-toJson : Html a -> Json.Decode.Value
-toJson node =
-    Native.HtmlAsJson.toJson node
-
-
-eventHandler : String -> Html a -> Json.Decode.Value
-eventHandler eventName node =
-    Native.HtmlAsJson.eventHandler eventName node
-
-
-taggerFunction : Json.Decode.Value -> (a -> msg)
-taggerFunction tagger =
-    Native.HtmlAsJson.taggerFunction tagger
-
-
-decodedNode : NodeRecord
-decodedNode =
-    { tag = "div"
-    , children = []
-    , facts = decodedFacts
-    , descendantsCount = 0
-    }
-
-
-decodedFacts : Facts
-decodedFacts =
-    { styles = Dict.fromList []
-    , events = Dict.fromList []
-    , taggers = []
-    , attributeNamespace = Nothing
-    , stringAttributes = Dict.fromList []
-    , boolAttributes = Dict.fromList []
-    }
-
-
-fromHtml : Html a -> Result String ElmHtml
-fromHtml =
-    decodeValue decodeElmHtml << toJson
-
-
-type Msg
-    = SomeMsg
-    | InputMsg String
-    | CheckMsg Bool
 
 
 all : Test
@@ -110,44 +64,103 @@ all =
                 \() ->
                     let
                         taggedNode =
-                            div [] []
+                            input [ onInput identity ] []
                                 |> Html.map (\msg -> msg ++ "bar")
+                                |> fromHtml
                     in
-                        Expect.equal (simulateMsg taggedNode "foo") "foobar"
+                        taggedNode
+                            |> Result.andThen (simulate "input" "{\"target\": {\"value\": \"foo\"}}")
+                            |> Expect.equal (Ok "foobar")
             , test "adds two taggers to a double mapped button with changing types" <|
                 \() ->
                     let
                         taggedNode =
-                            div [ onClick "somestring" ] []
+                            input [ onInput identity ] []
                                 |> Html.map (\str -> [ str ] ++ [ "bar" ])
                                 |> Html.map (\list -> ( list, "baz" ))
+                                |> fromHtml
                     in
-                        Expect.equal (simulateMsg taggedNode "foo") ( [ "foo", "bar" ], "baz" )
+                        taggedNode
+                            |> Result.andThen (simulate "input" "{\"target\": {\"value\": \"foo\"}}")
+                            |> Expect.equal (Ok ( [ "foo", "bar" ], "baz" ))
             ]
         ]
 
 
-simulateMsg : Html msg -> a -> msg
-simulateMsg parsedHtml =
-    case (fromHtml parsedHtml) of
-        Ok (NodeEntry node) ->
-            applyTaggers node.facts.taggers
-
-        _ ->
-            Debug.crash "taggers not found"
+type Msg
+    = SomeMsg
+    | InputMsg String
+    | CheckMsg Bool
 
 
-applyTaggers : List Tagger -> a -> msg
-applyTaggers taggers msg =
+toJson : Html a -> Json.Decode.Value
+toJson node =
+    Native.HtmlAsJson.toJson node
+
+
+eventDecoder : EventHandler -> Json.Decode.Decoder msg
+eventDecoder eventHandler =
+    Native.HtmlAsJson.eventDecoder eventHandler
+
+
+eventHandler : String -> Html a -> Json.Decode.Value
+eventHandler eventName node =
+    Native.HtmlAsJson.eventHandler eventName node
+
+
+taggerFunction : Tagger -> (a -> msg)
+taggerFunction tagger =
+    Native.HtmlAsJson.taggerFunction tagger
+
+
+taggedEventDecoder : List Tagger -> EventHandler -> Json.Decode.Decoder msg
+taggedEventDecoder taggers eventHandler =
     case taggers of
         [] ->
-            Debug.crash "could not apply empty taggers"
+            (eventDecoder eventHandler)
 
         [ tagger ] ->
-            (taggerFunction tagger msg)
+            Json.Decode.map (taggerFunction tagger) (eventDecoder eventHandler)
 
         tagger :: taggers ->
-            applyTaggers taggers (taggerFunction tagger msg)
+            Json.Decode.map (taggerFunction tagger) (taggedEventDecoder taggers eventHandler)
+
+
+decodedNode : NodeRecord msg
+decodedNode =
+    { tag = "div"
+    , children = []
+    , facts = decodedFacts
+    , descendantsCount = 0
+    }
+
+
+decodedFacts : Facts msg
+decodedFacts =
+    { styles = Dict.fromList []
+    , events = Dict.fromList []
+    , attributeNamespace = Nothing
+    , stringAttributes = Dict.fromList []
+    , boolAttributes = Dict.fromList []
+    }
+
+
+fromHtml : Html a -> Result String (ElmHtml msg)
+fromHtml html =
+    toJson html
+        |> decodeValue (decodeElmHtml taggedEventDecoder)
+
+
+simulate : String -> String -> ElmHtml msg -> Result String msg
+simulate eventName event parsedHtml =
+    case parsedHtml of
+        NodeEntry node ->
+            Dict.get eventName node.facts.events
+                |> Result.fromMaybe "Tried to trigger event on something other than a NodeEntry"
+                |> Result.andThen (\eventDecoder -> Json.Decode.decodeString eventDecoder event)
+
+        _ ->
+            Err "Tried to trigger event on something other than a NodeEntry"
 
 
 testParsingEvent : String -> Html.Attribute a -> Test
@@ -160,7 +173,7 @@ testParsingEvent eventName eventAttribute =
 
                 facts =
                     { decodedFacts
-                        | events = Dict.fromList [ ( eventName, eventHandler eventName node ) ]
+                        | events = Dict.fromList [ ( eventName, eventDecoder (eventHandler eventName node) ) ]
                     }
 
                 expected =

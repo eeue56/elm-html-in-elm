@@ -7,6 +7,7 @@ module ElmHtml.InternalTypes
         , MarkdownNodeRecord
         , Facts
         , Tagger
+        , EventHandler
         , decodeElmHtml
         , emptyFacts
         , ElementKind(..)
@@ -15,7 +16,7 @@ module ElmHtml.InternalTypes
 
 {-| Internal types used to represent Elm Html in pure Elm
 
-@docs ElmHtml, TextTagRecord, NodeRecord, CustomNodeRecord, MarkdownNodeRecord, Facts, Tagger, ElementKind
+@docs ElmHtml, TextTagRecord, NodeRecord, CustomNodeRecord, MarkdownNodeRecord, Facts, Tagger, EventHandler, ElementKind
 
 @docs decodeElmHtml, emptyFacts, toElementKind
 -}
@@ -34,11 +35,11 @@ import ElmHtml.Helpers exposing (..)
 - CustomNode are nodes defined to work with the renderer in some way, e.g webgl/markdown
 - MarkdownNode is just a wrapper for CustomNode designed just for markdown
 -}
-type ElmHtml
+type ElmHtml msg
     = TextTag TextTagRecord
-    | NodeEntry NodeRecord
-    | CustomNode CustomNodeRecord
-    | MarkdownNode MarkdownNodeRecord
+    | NodeEntry (NodeRecord msg)
+    | CustomNode (CustomNodeRecord msg)
+    | MarkdownNode (MarkdownNodeRecord msg)
     | NoOp
 
 
@@ -50,11 +51,11 @@ type alias TextTagRecord =
 
 {-| A node contains the `tag` as a string, the children, the facts (e.g attributes) and descendantsCount
 -}
-type alias NodeRecord =
+type alias NodeRecord msg =
     { tag : String
-    , children : List ElmHtml
+    , children : List (ElmHtml msg)
     , facts :
-        Facts
+        Facts msg
         --, namespace : String
     , descendantsCount : Int
     }
@@ -62,24 +63,34 @@ type alias NodeRecord =
 
 {-| A markdown node contains facts (e.g attributes) and the model used by markdown
 -}
-type alias MarkdownNodeRecord =
-    { facts : Facts
+type alias MarkdownNodeRecord msg =
+    { facts : Facts msg
     , model : MarkdownModel
     }
 
 
 {-| Custom nodes contain facts (e.g attributes) and a json value for the model
 -}
-type alias CustomNodeRecord =
-    { facts : Facts
+type alias CustomNodeRecord msg =
+    { facts : Facts msg
     , model : Json.Decode.Value
     }
 
 
 {-| Tagger holds the map function when Html.Map is used, the tagger
-should then be applied to events comming from descendant nodes
+should then be applied to events comming from descendant nodes, it
+is basically a javascript function.
 -}
 type alias Tagger =
+    Json.Decode.Value
+
+
+{-| EventHandler holds the function that is called when an event is
+triggered, it is basically a javascript object like this:
+
+{ decoder: [Function] }
+-}
+type alias EventHandler =
     Json.Decode.Value
 
 
@@ -89,10 +100,9 @@ type alias Tagger =
 - attributes are pulled out into stringAttributes and boolAttributes - things with string values go into
   stringAttributes, things with bool values go into boolAttributes
 -}
-type alias Facts =
+type alias Facts msg =
     { styles : Dict String String
-    , events : Dict String Json.Decode.Value
-    , taggers : List Tagger
+    , events : Dict String (Json.Decode.Decoder msg)
     , attributeNamespace : Maybe Json.Decode.Value
     , stringAttributes : Dict String String
     , boolAttributes : Dict String Bool
@@ -111,15 +121,26 @@ type ElementKind
     | NormalElements
 
 
-{-| decode a json object into ElmHtml
+type HtmlContext msg
+    = HtmlContext (List Tagger) (List Tagger -> EventHandler -> Json.Decode.Decoder msg)
+
+
+{-| decode a json object into ElmHtml, you have to pass a function that decodes
+events from Html Nodes. If you don't want to decode event msgs, you can ignore it:
+
+decodeElmHtml (\_ _ -> ()) jsonHtml
+
+if you do want to decode them, you will probably need to write some native code
+like elm-html-test does to extract the function inside those.
+
 -}
-decodeElmHtml : Json.Decode.Decoder ElmHtml
-decodeElmHtml =
-    decodeElmHtmlWithTaggers []
+decodeElmHtml : (List Tagger -> EventHandler -> Json.Decode.Decoder msg) -> Json.Decode.Decoder (ElmHtml msg)
+decodeElmHtml eventDecoder =
+    contextDecodeElmHtml (HtmlContext [] eventDecoder)
 
 
-decodeElmHtmlWithTaggers : List Tagger -> Json.Decode.Decoder ElmHtml
-decodeElmHtmlWithTaggers taggers =
+contextDecodeElmHtml : HtmlContext msg -> Json.Decode.Decoder (ElmHtml msg)
+contextDecodeElmHtml context =
     field "type" Json.Decode.string
         |> Json.Decode.andThen
             (\typeString ->
@@ -128,19 +149,19 @@ decodeElmHtmlWithTaggers taggers =
                         Json.Decode.map TextTag (decodeTextTag)
 
                     "keyed-node" ->
-                        Json.Decode.map NodeEntry (decodeKeyedNode taggers)
+                        Json.Decode.map NodeEntry (decodeKeyedNode context)
 
                     "node" ->
-                        Json.Decode.map NodeEntry (decodeNode taggers)
+                        Json.Decode.map NodeEntry (decodeNode context)
 
                     "custom" ->
-                        decodeCustomNode taggers
+                        decodeCustomNode context
 
                     "tagger" ->
-                        decodeTagger taggers
+                        decodeTagger context
 
                     "thunk" ->
-                        field "node" (decodeElmHtmlWithTaggers taggers)
+                        field "node" (contextDecodeElmHtml context)
 
                     _ ->
                         Json.Decode.fail ("No such type as " ++ typeString)
@@ -163,48 +184,52 @@ encodeTextTag { text } =
 
 {-| decode a tagger
 -}
-decodeTagger : List Tagger -> Json.Decode.Decoder ElmHtml
-decodeTagger taggers =
+decodeTagger : HtmlContext msg -> Json.Decode.Decoder (ElmHtml msg)
+decodeTagger (HtmlContext taggers eventDecoder) =
     Json.Decode.field "tagger" (Json.Decode.value)
         |> Json.Decode.andThen
             (\tagger ->
-                Json.Decode.oneOf
-                    [ Json.Decode.at [ "node" ] (decodeElmHtmlWithTaggers (tagger :: taggers))
-                    , Json.Decode.at [ "text" ] (decodeElmHtmlWithTaggers (tagger :: taggers))
-                    , Json.Decode.at [ "custom" ] (decodeElmHtmlWithTaggers (tagger :: taggers))
-                    ]
+                let
+                    nodeDecoder =
+                        contextDecodeElmHtml (HtmlContext (taggers ++ [ tagger ]) eventDecoder)
+                in
+                    Json.Decode.oneOf
+                        [ Json.Decode.at [ "node" ] nodeDecoder
+                        , Json.Decode.at [ "text" ] nodeDecoder
+                        , Json.Decode.at [ "custom" ] nodeDecoder
+                        ]
             )
 
 
-decodeKeyedNode : List Tagger -> Json.Decode.Decoder NodeRecord
-decodeKeyedNode taggers =
+decodeKeyedNode : HtmlContext msg -> Json.Decode.Decoder (NodeRecord msg)
+decodeKeyedNode context =
     let
         -- elm stores keyed nodes as tuples
         -- we only want to decode the html, in the second property
         decodeSecondNode =
-            Json.Decode.field "_1" (decodeElmHtmlWithTaggers taggers)
+            Json.Decode.field "_1" (contextDecodeElmHtml context)
     in
         Json.Decode.map4 NodeRecord
             (Json.Decode.field "tag" Json.Decode.string)
             (Json.Decode.field "children" (Json.Decode.list decodeSecondNode))
-            (Json.Decode.field "facts" (decodeFacts taggers))
+            (Json.Decode.field "facts" (decodeFacts context))
             (Json.Decode.field "descendantsCount" Json.Decode.int)
 
 
 {-| decode a node record
 -}
-decodeNode : List Tagger -> Json.Decode.Decoder NodeRecord
-decodeNode taggers =
+decodeNode : HtmlContext msg -> Json.Decode.Decoder (NodeRecord msg)
+decodeNode context =
     Json.Decode.map4 NodeRecord
         (field "tag" Json.Decode.string)
-        (field "children" (Json.Decode.list (decodeElmHtmlWithTaggers taggers)))
-        (field "facts" (decodeFacts taggers))
+        (field "children" (Json.Decode.list (contextDecodeElmHtml context)))
+        (field "facts" (decodeFacts context))
         (field "descendantsCount" Json.Decode.int)
 
 
 {-| encode a node record: currently does not support facts or children
 -}
-encodeNodeRecord : NodeRecord -> Json.Encode.Value
+encodeNodeRecord : NodeRecord msg -> Json.Encode.Value
 encodeNodeRecord record =
     Json.Encode.object
         [ ( "tag", Json.Encode.string record.tag )
@@ -216,29 +241,29 @@ encodeNodeRecord record =
 
 {-| decode custom node into either markdown or custom
 -}
-decodeCustomNode : List Tagger -> Json.Decode.Decoder ElmHtml
-decodeCustomNode taggers =
+decodeCustomNode : HtmlContext msg -> Json.Decode.Decoder (ElmHtml msg)
+decodeCustomNode context =
     Json.Decode.oneOf
-        [ Json.Decode.map MarkdownNode (decodeMarkdownNodeRecord taggers)
-        , Json.Decode.map CustomNode (decodeCustomNodeRecord taggers)
+        [ Json.Decode.map MarkdownNode (decodeMarkdownNodeRecord context)
+        , Json.Decode.map CustomNode (decodeCustomNodeRecord context)
         ]
 
 
 {-| decode custom node record
 -}
-decodeCustomNodeRecord : List Tagger -> Json.Decode.Decoder CustomNodeRecord
-decodeCustomNodeRecord taggers =
+decodeCustomNodeRecord : HtmlContext msg -> Json.Decode.Decoder (CustomNodeRecord msg)
+decodeCustomNodeRecord context =
     Json.Decode.map2 CustomNodeRecord
-        (field "facts" (decodeFacts taggers))
+        (field "facts" (decodeFacts context))
         (field "model" Json.Decode.value)
 
 
 {-| decode markdown node record
 -}
-decodeMarkdownNodeRecord : List Tagger -> Json.Decode.Decoder MarkdownNodeRecord
-decodeMarkdownNodeRecord taggers =
+decodeMarkdownNodeRecord : HtmlContext msg -> Json.Decode.Decoder (MarkdownNodeRecord msg)
+decodeMarkdownNodeRecord context =
     Json.Decode.map2 MarkdownNodeRecord
-        (field "facts" (decodeFacts taggers))
+        (field "facts" (decodeFacts context))
         (field "model" decodeMarkdownModel)
 
 
@@ -306,22 +331,21 @@ decodeAttributes decoder =
         ]
 
 
-decodeEvents : Json.Decode.Decoder (Dict String Json.Decode.Value)
-decodeEvents =
+decodeEvents : (EventHandler -> Json.Decode.Decoder msg) -> Json.Decode.Decoder (Dict String (Json.Decode.Decoder msg))
+decodeEvents taggedEventDecoder =
     Json.Decode.oneOf
-        [ Json.Decode.field eventKey (Json.Decode.dict Json.Decode.value)
+        [ Json.Decode.field eventKey (Json.Decode.dict (Json.Decode.map taggedEventDecoder Json.Decode.value))
         , Json.Decode.succeed Dict.empty
         ]
 
 
 {-| decode fact
 -}
-decodeFacts : List Tagger -> Json.Decode.Decoder Facts
-decodeFacts taggers =
-    Json.Decode.map6 Facts
+decodeFacts : HtmlContext msg -> Json.Decode.Decoder (Facts msg)
+decodeFacts (HtmlContext taggers eventDecoder) =
+    Json.Decode.map5 Facts
         (decodeStyles)
-        (decodeEvents)
-        (Json.Decode.succeed taggers)
+        (decodeEvents (eventDecoder taggers))
         (Json.Decode.maybe (Json.Decode.field attributeNamespaceKey Json.Decode.value))
         (decodeOthers Json.Decode.string)
         (decodeOthers Json.Decode.bool)
@@ -329,11 +353,10 @@ decodeFacts taggers =
 
 {-| Just empty facts
 -}
-emptyFacts : Facts
+emptyFacts : Facts msg
 emptyFacts =
     { styles = Dict.empty
     , events = Dict.empty
-    , taggers = []
     , attributeNamespace = Nothing
     , stringAttributes = Dict.empty
     , boolAttributes = Dict.empty
