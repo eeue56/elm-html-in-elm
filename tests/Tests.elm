@@ -1,15 +1,15 @@
 module Tests exposing (..)
 
 import Dict
-import ElmHtml.InternalTypes exposing (Attribute(..), decodeAttribute, ElmHtml, ElmHtml(..), Facts, NodeRecord, Tagger, EventHandler, decodeElmHtml)
+import ElmHtml.InternalTypes exposing (Attribute(..), ElmHtml(..), EventHandler, Facts, NodeRecord, Tagger, decodeAttribute, decodeElmHtml)
 import Expect
 import Html exposing (Html, button, div, input, text)
-import Html.Attributes exposing (class, disabled, value, colspan, style)
+import Html.Attributes exposing (class, colspan, disabled, style, value)
 import Html.Events exposing (onCheck, onClick, onInput)
-import Svg.Attributes exposing (xlinkHref)
 import Json.Decode exposing (decodeValue)
 import Json.Encode
 import Native.HtmlAsJson
+import Svg.Attributes exposing (xlinkHref)
 import Test exposing (..)
 
 
@@ -38,9 +38,9 @@ elmHtml =
                     expected =
                         { decodedNode | tag = "button", facts = facts }
                 in
-                    button [ class "foo", value "bar", disabled True ] []
-                        |> fromHtml
-                        |> Expect.equal (Ok (NodeEntry expected))
+                button [ class "foo", value "bar", disabled True ] []
+                    |> fromHtml
+                    |> Expect.equal (Ok (NodeEntry expected))
         , test "parsing children" <|
             \() ->
                 let
@@ -50,12 +50,12 @@ elmHtml =
                             , descendantsCount = 2
                         }
                 in
-                    div []
-                        [ div [] []
-                        , text "foo"
-                        ]
-                        |> fromHtml
-                        |> Expect.equal (Ok (NodeEntry expected))
+                div []
+                    [ div [] []
+                    , text "foo"
+                    ]
+                    |> fromHtml
+                    |> Expect.equal (Ok (NodeEntry expected))
         , describe "parsing events"
             [ testParsingEvent "click" (onClick SomeMsg)
             , testParsingEvent "input" (onInput InputMsg)
@@ -70,9 +70,9 @@ elmHtml =
                                 |> Html.map (\msg -> msg ++ "bar")
                                 |> fromHtml
                     in
-                        taggedNode
-                            |> Result.andThen (simulate "input" "{\"target\": {\"value\": \"foo\"}}")
-                            |> Expect.equal (Ok "foobar")
+                    taggedNode
+                        |> Result.andThen (simulate "input" "{\"target\": {\"value\": \"foo\"}}")
+                        |> Expect.equal (Ok "foobar")
             , test "adds two taggers to a double mapped button with changing types" <|
                 \() ->
                     let
@@ -82,9 +82,9 @@ elmHtml =
                                 |> Html.map (\list -> ( list, "baz" ))
                                 |> fromHtml
                     in
-                        taggedNode
-                            |> Result.andThen (simulate "input" "{\"target\": {\"value\": \"foo\"}}")
-                            |> Expect.equal (Ok ( [ "foo", "bar" ], "baz" ))
+                    taggedNode
+                        |> Result.andThen (simulate "input" "{\"target\": {\"value\": \"foo\"}}")
+                        |> Expect.equal (Ok ( [ "foo", "bar" ], "baz" ))
             ]
         ]
 
@@ -112,7 +112,8 @@ attributes =
             \() ->
                 onClick ()
                     |> fromAttribute
-                    |> Expect.equal (Ok (Event { key = "click", decoder = Json.Decode.succeed (), options = Html.Events.defaultOptions }))
+                    |> Expect.equal
+                        (Ok (Event { key = "click", decoder = toJson (Json.Decode.succeed ()), options = Html.Events.defaultOptions }))
         , test "parsing Styles" <|
             \() ->
                 style [ ( "margin", "0" ) ]
@@ -151,7 +152,7 @@ taggedEventDecoder : List Tagger -> EventHandler -> Json.Decode.Decoder msg
 taggedEventDecoder taggers eventHandler =
     case taggers of
         [] ->
-            (eventDecoder eventHandler)
+            eventDecoder eventHandler
 
         [ tagger ] ->
             Json.Decode.map (taggerFunction tagger) (eventDecoder eventHandler)
@@ -160,15 +161,10 @@ taggedEventDecoder taggers eventHandler =
             Json.Decode.map (taggerFunction tagger) (taggedEventDecoder taggers eventHandler)
 
 
-eventAttributeDecoder : EventHandler -> Json.Decode.Decoder msg
-eventAttributeDecoder =
-    Native.HtmlAsJson.unsafeCoerce
-
-
-fromAttribute : Html.Attribute a -> Result String (Attribute a)
+fromAttribute : Html.Attribute a -> Result String Attribute
 fromAttribute attribute =
     toJson attribute
-        |> decodeValue (decodeAttribute eventAttributeDecoder)
+        |> decodeValue decodeAttribute
 
 
 decodedNode : NodeRecord msg
@@ -224,6 +220,6 @@ testParsingEvent eventName eventAttribute =
                 expected =
                     { decodedNode | tag = "button", facts = facts }
             in
-                node
-                    |> fromHtml
-                    |> Expect.equal (Ok (NodeEntry expected))
+            node
+                |> fromHtml
+                |> Expect.equal (Ok (NodeEntry expected))

@@ -1,22 +1,22 @@
 module ElmHtml.InternalTypes
     exposing
-        ( ElmHtml(..)
-        , TextTagRecord
-        , NodeRecord
-        , CustomNodeRecord
-        , MarkdownNodeRecord
-        , Facts
-        , Tagger
-        , EventHandler
-        , Attribute(..)
+        ( Attribute(..)
         , AttributeRecord
-        , NamespacedAttributeRecord
-        , PropertyRecord
+        , CustomNodeRecord
+        , ElementKind(..)
+        , ElmHtml(..)
+        , EventHandler
         , EventRecord
+        , Facts
+        , MarkdownNodeRecord
+        , NamespacedAttributeRecord
+        , NodeRecord
+        , PropertyRecord
+        , Tagger
+        , TextTagRecord
+        , decodeAttribute
         , decodeElmHtml
         , emptyFacts
-        , decodeAttribute
-        , ElementKind(..)
         , toElementKind
         )
 
@@ -33,12 +33,12 @@ module ElmHtml.InternalTypes
 -}
 
 import Dict exposing (Dict)
-import Json.Encode
-import Json.Decode exposing (field)
-import ElmHtml.Markdown exposing (..)
 import ElmHtml.Constants exposing (..)
 import ElmHtml.Helpers exposing (..)
+import ElmHtml.Markdown exposing (..)
 import Html.Events
+import Json.Decode exposing (field)
+import Json.Encode
 
 
 {-| Type tree for representing Elm's Html
@@ -156,12 +156,12 @@ type HtmlContext msg
   - Event contains a decoder for a msg and the `Html.Event.Options` for the event
 
 -}
-type Attribute msg
+type Attribute
     = Attribute AttributeRecord
     | NamespacedAttribute NamespacedAttributeRecord
     | Property PropertyRecord
     | Styles (List ( String, String ))
-    | Event (EventRecord msg)
+    | Event EventRecord
 
 
 {-| Attribute contains a string key and a string value
@@ -191,9 +191,9 @@ type alias PropertyRecord =
 
 {-| Event contains a string key, a decoder for a msg and event options
 -}
-type alias EventRecord msg =
+type alias EventRecord =
     { key : String
-    , decoder : Json.Decode.Decoder msg
+    , decoder : Json.Decode.Value
     , options : Html.Events.Options
     }
 
@@ -201,7 +201,7 @@ type alias EventRecord msg =
 {-| decode a json object into ElmHtml, you have to pass a function that decodes
 events from Html Nodes. If you don't want to decode event msgs, you can ignore it:
 
-decodeElmHtml (\_ _ -> ()) jsonHtml
+decodeElmHtml (_ _ -> ()) jsonHtml
 
 if you do want to decode them, you will probably need to write some native code
 like elm-html-test does to extract the function inside those.
@@ -219,7 +219,7 @@ contextDecodeElmHtml context =
             (\typeString ->
                 case typeString of
                     "text" ->
-                        Json.Decode.map TextTag (decodeTextTag)
+                        Json.Decode.map TextTag decodeTextTag
 
                     "keyed-node" ->
                         Json.Decode.map NodeEntry (decodeKeyedNode context)
@@ -259,18 +259,18 @@ encodeTextTag { text } =
 -}
 decodeTagger : HtmlContext msg -> Json.Decode.Decoder (ElmHtml msg)
 decodeTagger (HtmlContext taggers eventDecoder) =
-    Json.Decode.field "tagger" (Json.Decode.value)
+    Json.Decode.field "tagger" Json.Decode.value
         |> Json.Decode.andThen
             (\tagger ->
                 let
                     nodeDecoder =
                         contextDecodeElmHtml (HtmlContext (taggers ++ [ tagger ]) eventDecoder)
                 in
-                    Json.Decode.oneOf
-                        [ Json.Decode.at [ "node" ] nodeDecoder
-                        , Json.Decode.at [ "text" ] nodeDecoder
-                        , Json.Decode.at [ "custom" ] nodeDecoder
-                        ]
+                Json.Decode.oneOf
+                    [ Json.Decode.at [ "node" ] nodeDecoder
+                    , Json.Decode.at [ "text" ] nodeDecoder
+                    , Json.Decode.at [ "custom" ] nodeDecoder
+                    ]
             )
 
 
@@ -282,11 +282,11 @@ decodeKeyedNode context =
         decodeSecondNode =
             Json.Decode.field "_1" (contextDecodeElmHtml context)
     in
-        Json.Decode.map4 NodeRecord
-            (Json.Decode.field "tag" Json.Decode.string)
-            (Json.Decode.field "children" (Json.Decode.list decodeSecondNode))
-            (Json.Decode.field "facts" (decodeFacts context))
-            (Json.Decode.field "descendantsCount" Json.Decode.int)
+    Json.Decode.map4 NodeRecord
+        (Json.Decode.field "tag" Json.Decode.string)
+        (Json.Decode.field "children" (Json.Decode.list decodeSecondNode))
+        (Json.Decode.field "facts" (decodeFacts context))
+        (Json.Decode.field "descendantsCount" Json.Decode.int)
 
 
 {-| decode a node record
@@ -361,7 +361,7 @@ encodeStyles stylesDict =
                 |> Dict.toList
                 |> List.map (\( k, v ) -> ( k, Json.Encode.string v ))
     in
-        Json.Encode.object [ ( styleKey, Json.Encode.object encodedDict ) ]
+    Json.Encode.object [ ( styleKey, Json.Encode.object encodedDict ) ]
 
 
 {-| grab things from attributes via a decoder, then anything that isn't filtered on
@@ -418,7 +418,7 @@ decodeEvents taggedEventDecoder =
 decodeFacts : HtmlContext msg -> Json.Decode.Decoder (Facts msg)
 decodeFacts (HtmlContext taggers eventDecoder) =
     Json.Decode.map5 Facts
-        (decodeStyles)
+        decodeStyles
         (decodeEvents (eventDecoder taggers))
         (Json.Decode.maybe (Json.Decode.field attributeNamespaceKey Json.Decode.value))
         (decodeOthers Json.Decode.string)
@@ -447,8 +447,8 @@ If you do want to decode them, you will probably need to write some native code
 like elm-html-test does to extract the function inside those.
 
 -}
-decodeAttribute : (EventHandler -> Json.Decode.Decoder msg) -> Json.Decode.Decoder (Attribute msg)
-decodeAttribute eventDecoder =
+decodeAttribute : Json.Decode.Decoder Attribute
+decodeAttribute =
     Json.Decode.field "key" Json.Decode.string
         |> Json.Decode.andThen
             (\key ->
@@ -473,7 +473,7 @@ decodeAttribute eventDecoder =
                 else if key == eventKey then
                     Json.Decode.map3 EventRecord
                         (Json.Decode.field "realKey" Json.Decode.string)
-                        (Json.Decode.at [ "value", "decoder" ] (Json.Decode.map eventDecoder Json.Decode.value))
+                        (Json.Decode.at [ "value", "decoder" ] Json.Decode.value)
                         (Json.Decode.at [ "value", "options" ] decodeOptions)
                         |> Json.Decode.map Event
                 else
