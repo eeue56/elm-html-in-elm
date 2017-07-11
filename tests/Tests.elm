@@ -1,18 +1,20 @@
 module Tests exposing (..)
 
 import Dict
-import ElmHtml.InternalTypes exposing (ElmHtml, ElmHtml(..), Facts, NodeRecord, Tagger, EventHandler, decodeElmHtml)
+import ElmHtml.InternalTypes exposing (Attribute(..), decodeAttribute, ElmHtml, ElmHtml(..), Facts, NodeRecord, Tagger, EventHandler, decodeElmHtml)
 import Expect
 import Html exposing (Html, button, div, input, text)
-import Html.Attributes exposing (class, disabled, value)
+import Html.Attributes exposing (class, disabled, value, colspan, style)
 import Html.Events exposing (onCheck, onClick, onInput)
+import Svg.Attributes exposing (xlinkHref)
 import Json.Decode exposing (decodeValue)
+import Json.Encode
 import Native.HtmlAsJson
 import Test exposing (..)
 
 
-all : Test
-all =
+elmHtml : Test
+elmHtml =
     describe "ElmHtml parsing"
         [ test "parsing a node" <|
             \() ->
@@ -87,15 +89,47 @@ all =
         ]
 
 
+attributes : Test
+attributes =
+    describe "Attribute parsing"
+        [ test "parsing Attribute" <|
+            \() ->
+                colspan 1
+                    |> fromAttribute
+                    |> Expect.equal (Ok (Attribute { key = "colspan", value = "1" }))
+        , test "parsing NamespacedAttribute" <|
+            \() ->
+                xlinkHref "#id"
+                    |> fromAttribute
+                    |> Expect.equal
+                        (Ok (NamespacedAttribute { key = "xlink:href", value = "#id", namespace = "http://www.w3.org/1999/xlink" }))
+        , test "parsing Property" <|
+            \() ->
+                disabled True
+                    |> fromAttribute
+                    |> Expect.equal (Ok (Property { key = "disabled", value = Json.Encode.bool True }))
+        , test "parsing Event" <|
+            \() ->
+                onClick ()
+                    |> fromAttribute
+                    |> Expect.equal (Ok (Event { key = "click", decoder = Json.Decode.succeed (), options = Html.Events.defaultOptions }))
+        , test "parsing Styles" <|
+            \() ->
+                style [ ( "margin", "0" ) ]
+                    |> fromAttribute
+                    |> Expect.equal (Ok (Styles [ ( "margin", "0" ) ]))
+        ]
+
+
 type Msg
     = SomeMsg
     | InputMsg String
     | CheckMsg Bool
 
 
-toJson : Html a -> Json.Decode.Value
-toJson node =
-    Native.HtmlAsJson.toJson node
+toJson : a -> Json.Decode.Value
+toJson =
+    Native.HtmlAsJson.unsafeCoerce
 
 
 eventDecoder : EventHandler -> Json.Decode.Decoder msg
@@ -124,6 +158,17 @@ taggedEventDecoder taggers eventHandler =
 
         tagger :: taggers ->
             Json.Decode.map (taggerFunction tagger) (taggedEventDecoder taggers eventHandler)
+
+
+eventAttributeDecoder : EventHandler -> Json.Decode.Decoder msg
+eventAttributeDecoder =
+    Native.HtmlAsJson.unsafeCoerce
+
+
+fromAttribute : Html.Attribute a -> Result String (Attribute a)
+fromAttribute attribute =
+    toJson attribute
+        |> decodeValue (decodeAttribute eventAttributeDecoder)
 
 
 decodedNode : NodeRecord msg
