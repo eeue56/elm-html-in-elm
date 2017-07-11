@@ -201,7 +201,7 @@ type alias EventRecord msg =
 {-| decode a json object into ElmHtml, you have to pass a function that decodes
 events from Html Nodes. If you don't want to decode event msgs, you can ignore it:
 
-decodeElmHtml (_ _ -> ()) jsonHtml
+decodeElmHtml (\_ _ -> ()) jsonHtml
 
 if you do want to decode them, you will probably need to write some native code
 like elm-html-test does to extract the function inside those.
