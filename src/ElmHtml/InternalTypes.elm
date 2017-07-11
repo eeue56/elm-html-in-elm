@@ -22,7 +22,11 @@ module ElmHtml.InternalTypes
 
 {-| Internal types used to represent Elm Html in pure Elm
 
-@docs ElmHtml, TextTagRecord, NodeRecord, CustomNodeRecord, MarkdownNodeRecord, Facts, Tagger, EventHandler, ElementKind, Attribute, AttributeRecord, NamespacedAttributeRecord, PropertyRecord, EventRecord
+@docs ElmHtml, TextTagRecord, NodeRecord, CustomNodeRecord, MarkdownNodeRecord
+
+@docs Facts, Tagger, EventHandler, ElementKind
+
+@docs Attribute, AttributeRecord, NamespacedAttributeRecord, PropertyRecord, EventRecord
 
 @docs decodeElmHtml, emptyFacts, toElementKind, decodeAttribute
 
@@ -141,9 +145,13 @@ type HtmlContext msg
 
 {-| Type for representing Elm's Attributes
 
-  - Attribute is an HTML attribute, like `Html.Attributes.title`
+  - Attribute is an HTML attribute, like `Html.Attributes.colspan`. These values
+    are applied using `element.setAttribute(key, value)` during a patch.
   - NamespacedAttribute has an namespace, like `Svg.Attributes.xlinkHref`
-  - Property assigns a value directly to a node like `Html.Attributes.class`, and can hold any encoded value.
+  - Property assigns a value to a node like `Html.Attributes.class`, and can
+    hold any encoded value. Unlike attributes, where `element.setAttribute()` is
+    used during the patch, properties are applied directly as
+    `element[key] = value`.
   - Styles hold a list of key value pairs to be applied to the node's style set
   - Event contains a decoder for a msg and the `Html.Event.Options` for the event
 
