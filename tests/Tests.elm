@@ -3,6 +3,7 @@ module Tests exposing (..)
 import Dict
 import ElmHtml.InternalTypes exposing (Attribute(..), ElmHtml(..), EventHandler, Facts, NodeRecord, Tagger, decodeAttribute, decodeElmHtml)
 import ElmHtml.ToHtml
+import ElmHtml.ToElmString exposing (toElmString)
 import Expect
 import Html exposing (Html, button, div, input, text)
 import Html.Attributes exposing (class, colspan, disabled, style, value)
@@ -141,6 +142,36 @@ elmHtmlToHtml =
                     |> fromHtml
                     |> Result.map ElmHtml.ToHtml.toHtml
                     |> Expect.equal (Ok <| div [ Html.Events.onClick True ] [])
+        ]
+
+
+elmHtmlToElmString : Test
+elmHtmlToElmString =
+    describe "Turning the AST into Elm, but as a string"
+        [ test "parsing a node" <|
+            \() ->
+                div [] []
+                    |> fromHtml
+                    |> Result.map toElmString
+                    |> Expect.equal (Ok <| "Html.div [ ] [ ]")
+        , test "parsing a text" <|
+            \() ->
+                text "foo"
+                    |> fromHtml
+                    |> Result.map toElmString
+                    |> Expect.equal (Ok <| "Html.text \"foo\"")
+        , test "parsing a nested node" <|
+            \() ->
+                div [] [ div [] [ text "hello" ] ]
+                    |> fromHtml
+                    |> Result.map toElmString
+                    |> Expect.equal (Ok <| "Html.div [ ] [ Html.div [ ] [ Html.text \"hello\"]]")
+        , test "parsing an attribute" <|
+            \() ->
+                div [ Html.Attributes.checked True ] [ text "hello" ]
+                    |> fromHtml
+                    |> Result.map toElmString
+                    |> Expect.equal (Ok <| "Html.div [ Html.Attributes.property \"checked\" <| Json.Encode.bool True ] [ Html.text \"hello\"]")
         ]
 
 
