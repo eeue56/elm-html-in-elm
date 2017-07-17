@@ -1,5 +1,5 @@
 {
-    "version": "5.1.0",
+    "version": "5.2.0",
     "summary": "A pure Elm representation of Elm Html",
     "repository": "https://github.com/eeue56/elm-html-in-elm.git",
     "license": "BSD3",
@@ -10,7 +10,9 @@
         "ElmHtml.Constants",
         "ElmHtml.InternalTypes",
         "ElmHtml.Markdown",
-        "ElmHtml.ToString"
+        "ElmHtml.ToString",
+        "ElmHtml.ToElmString",
+        "ElmHtml.ToHtml"
     ],
     "dependencies": {
         "elm-lang/core": "5.0.0 <= v < 6.0.0",
