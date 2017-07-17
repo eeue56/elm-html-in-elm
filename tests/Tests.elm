@@ -2,6 +2,7 @@ module Tests exposing (..)
 
 import Dict
 import ElmHtml.InternalTypes exposing (Attribute(..), ElmHtml(..), EventHandler, Facts, NodeRecord, Tagger, decodeAttribute, decodeElmHtml)
+import ElmHtml.ToHtml
 import Expect
 import Html exposing (Html, button, div, input, text)
 import Html.Attributes exposing (class, colspan, disabled, style, value)
@@ -38,9 +39,9 @@ elmHtml =
                     expected =
                         { decodedNode | tag = "button", facts = facts }
                 in
-                button [ class "foo", value "bar", disabled True ] []
-                    |> fromHtml
-                    |> Expect.equal (Ok (NodeEntry expected))
+                    button [ class "foo", value "bar", disabled True ] []
+                        |> fromHtml
+                        |> Expect.equal (Ok (NodeEntry expected))
         , test "parsing children" <|
             \() ->
                 let
@@ -50,12 +51,12 @@ elmHtml =
                             , descendantsCount = 2
                         }
                 in
-                div []
-                    [ div [] []
-                    , text "foo"
-                    ]
-                    |> fromHtml
-                    |> Expect.equal (Ok (NodeEntry expected))
+                    div []
+                        [ div [] []
+                        , text "foo"
+                        ]
+                        |> fromHtml
+                        |> Expect.equal (Ok (NodeEntry expected))
         , describe "parsing events"
             [ testParsingEvent "click" (onClick SomeMsg)
             , testParsingEvent "input" (onInput InputMsg)
@@ -70,9 +71,9 @@ elmHtml =
                                 |> Html.map (\msg -> msg ++ "bar")
                                 |> fromHtml
                     in
-                    taggedNode
-                        |> Result.andThen (simulate "input" "{\"target\": {\"value\": \"foo\"}}")
-                        |> Expect.equal (Ok "foobar")
+                        taggedNode
+                            |> Result.andThen (simulate "input" "{\"target\": {\"value\": \"foo\"}}")
+                            |> Expect.equal (Ok "foobar")
             , test "adds two taggers to a double mapped button with changing types" <|
                 \() ->
                     let
@@ -82,10 +83,64 @@ elmHtml =
                                 |> Html.map (\list -> ( list, "baz" ))
                                 |> fromHtml
                     in
-                    taggedNode
-                        |> Result.andThen (simulate "input" "{\"target\": {\"value\": \"foo\"}}")
-                        |> Expect.equal (Ok ( [ "foo", "bar" ], "baz" ))
+                        taggedNode
+                            |> Result.andThen (simulate "input" "{\"target\": {\"value\": \"foo\"}}")
+                            |> Expect.equal (Ok ( [ "foo", "bar" ], "baz" ))
             ]
+        ]
+
+
+elmHtmlToHtml : Test
+elmHtmlToHtml =
+    describe "Turning the AST into Html"
+        [ test "parsing a node" <|
+            \() ->
+                div [] []
+                    |> fromHtml
+                    |> Result.map ElmHtml.ToHtml.toHtml
+                    |> Expect.equal (Ok <| div [] [])
+        , test "parsing a text" <|
+            \() ->
+                text "foo"
+                    |> fromHtml
+                    |> Result.map ElmHtml.ToHtml.toHtml
+                    |> Expect.equal (Ok <| text "foo")
+        , test "parsing a text in a div" <|
+            \() ->
+                div [] [ text "foo" ]
+                    |> fromHtml
+                    |> Result.map ElmHtml.ToHtml.toHtml
+                    |> Expect.equal (Ok <| div [] [ text "foo" ])
+        , test "parsing a text in a div in a div in a div " <|
+            \() ->
+                div [] [ div [] [ text "banana", div [] [ text "foo", text "bar" ] ] ]
+                    |> fromHtml
+                    |> Result.map ElmHtml.ToHtml.toHtml
+                    |> Expect.equal (Ok <| div [] [ div [] [ text "banana", div [] [ text "foo", text "bar" ] ] ])
+        , test "parsing styles in a div" <|
+            \() ->
+                div [ Html.Attributes.style [ ( "background", "red" ) ] ] [ text "foo" ]
+                    |> fromHtml
+                    |> Result.map ElmHtml.ToHtml.toHtml
+                    |> Expect.equal (Ok <| div [ Html.Attributes.style [ ( "background", "red" ) ] ] [ text "foo" ])
+        , test "parsing attributes a div" <|
+            \() ->
+                div [ Html.Attributes.name "fish", Html.Attributes.checked True ] [ text "foo" ]
+                    |> fromHtml
+                    |> Result.map ElmHtml.ToHtml.toHtml
+                    |> Expect.equal (Ok <| div [ Html.Attributes.name "fish", Html.Attributes.checked True ] [ text "foo" ])
+        , test "parsing attributes in a nested div" <|
+            \() ->
+                div [ Html.Attributes.name "fish", Html.Attributes.checked True ] [ Html.li [ Html.Attributes.type_ "hello" ] [ text "foo" ] ]
+                    |> fromHtml
+                    |> Result.map ElmHtml.ToHtml.toHtml
+                    |> Expect.equal (Ok <| div [ Html.Attributes.name "fish", Html.Attributes.checked True ] [ Html.li [ Html.Attributes.type_ "hello" ] [ text "foo" ] ])
+        , test "parsing events in a  div" <|
+            \() ->
+                div [ Html.Events.onClick True ] []
+                    |> fromHtml
+                    |> Result.map ElmHtml.ToHtml.toHtml
+                    |> Expect.equal (Ok <| div [ Html.Events.onClick True ] [])
         ]
 
 
@@ -220,6 +275,6 @@ testParsingEvent eventName eventAttribute =
                 expected =
                     { decodedNode | tag = "button", facts = facts }
             in
-            node
-                |> fromHtml
-                |> Expect.equal (Ok (NodeEntry expected))
+                node
+                    |> fromHtml
+                    |> Expect.equal (Ok (NodeEntry expected))
